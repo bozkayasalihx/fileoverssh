@@ -1,10 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -42,13 +41,15 @@ func main() {
   
   defer session.Close()
 
-  var b bytes.Buffer
-  session.Stdout = &b
-  if err := session.Run("/usr/bin/whoami"); err != nil {
-    log.Fatalf("Failed to run : %v", err.Error())
+  session.Stdout = os.Stdout 
+  session.Stdin  = os.Stdin 
+  session.Stderr = os.Stderr
+
+  if err := session.Shell(); err != nil {
+    log.Fatalf("couldn't start shell on remote host: %v", err)
   }
-
-
-  fmt.Println(b.String())
-
+  
+  if err := session.Wait(); err != nil {
+    log.Fatalf("failed to wait for shell: %v", err)
+  }
 }
