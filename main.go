@@ -1,102 +1,54 @@
 package main
 
 import (
-	"bufio"
+	"bytes"
 	"fmt"
+	"io/ioutil"
 	"log"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
 	"golang.org/x/crypto/ssh"
 )
 
 func main() {
+  key, err := ioutil.ReadFile("/home/malware/maker_key.pem")
+  if err != nil {
+    log.Fatalf("unable to read private key: %v", err)
+  }
 
-	host := "20.126.71.5"
-	port := "22"
-	user := ""
-	pass := ""
-	cmd  := "ps"
+  signer ,err := ssh.ParsePrivateKey(key) 
+  if err != nil {
+    log.Fatalf("unable to parse private key: %v" ,err) 
+  }
 
-	hostKey := getHostKey(host)
+  config := &ssh.ClientConfig{
+    User: "azureuser", 
+    Auth: []ssh.AuthMethod{
+      ssh.PublicKeys(signer),
+    },
+    HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+    
+  } 
 
-	config := &ssh.ClientConfig{
-		User: user,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(pass),
-		},
-		HostKeyCallback: ssh.FixedHostKey(hostKey),
-		HostKeyAlgorithms: []string{
-			ssh.KeyAlgoRSA,
-			ssh.KeyAlgoDSA,
-			ssh.KeyAlgoECDSA256,
-			ssh.KeyAlgoECDSA384,
-			ssh.KeyAlgoECDSA521,
-			ssh.KeyAlgoED25519,
-		},
-		// optional tcp connect timeout
-		Timeout:         5 * time.Second,
-	}
 
-	// connect
-	client, err := ssh.Dial("tcp", host+":"+port, config)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer client.Close()
+  client , err := ssh.Dial("tcp", "20.126.71.5:22", config)
+  if err != nil {
+    log.Fatalf("unable to connect : %v", err)
+  }
 
-	// start session
-	sess, err := client.NewSession()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer sess.Close()
-
-	// setup standard out and error
-	// uses writer interface
-	sess.Stdout = os.Stdout
-	sess.Stderr = os.Stderr
-
-	// run single command
-	err = sess.Run(cmd)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-}
-
-func getHostKey(host string) ssh.PublicKey {
-	file, err := os.Open(filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-  fmt.Println(file)
+  session, err := client.NewSession()
+  if err != nil {
+    log.Fatalf("failed to create session: %v", err)
+  }
   
+  defer session.Close()
 
-	scanner := bufio.NewScanner(file)
-	var hostKey ssh.PublicKey
-	for scanner.Scan() {
-		fields := strings.Split(scanner.Text(), " ")
-		if len(fields) != 3 {
-			continue
-		}
-		if strings.Contains(fields[0], host) {
-			var err error
-			hostKey, _, _, _, err = ssh.ParseAuthorizedKey(scanner.Bytes())
-			if err != nil {
-				log.Fatalf("error parsing %q: %v", fields[2], err)
-			}
-			break
-		}
-	}
+  var b bytes.Buffer
+  session.Stdout = &b
+  if err := session.Run("/usr/bin/whoami"); err != nil {
+    log.Fatalf("Failed to run : %v", err.Error())
+  }
 
-	if hostKey == nil {
-		log.Fatalf("no hostkey found for %s", host)
-	}
 
-	return hostKey
+  fmt.Println(b.String())
+
 }
